@@ -2,15 +2,28 @@ package org.example;
 
 import com.github.freva.asciitable.AsciiTable;
 import com.github.freva.asciitable.Column;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import org.jline.terminal.Attributes;
+import org.jline.utils.InfoCmp;
+import org.jline.utils.NonBlockingReader;
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Scanner;
+import java.util.List;
 
-import static java.lang.System.exit;
-
+//import org.jline.terminal.Terminal;
+//import org.jline.terminal.TerminalBuilder;
+//import org.jline.utils.InfoCmp;
+//import org.jline.utils.NonBlockingReader;
+//
+//import java.io.IOException;
+//import java.util.List;
 
 enum StoryType {
     FUNNY("搞笑"),
@@ -32,10 +45,9 @@ enum StoryType {
 class Story {
     private final String title;
     private final String content;
-    private final int stars = 0;
+    private int stars = 0;
     private final LocalDateTime createDate;
     private final StoryType storyType;
-
 
     public Story(String title, String content, StoryType storyType) {
         this.title = title;
@@ -54,6 +66,10 @@ class Story {
 
     public int getStars() {
         return stars;
+    }
+
+    public void setStars(int _stars) {
+        stars = _stars;
     }
 
     public String getCreateDate() {
@@ -90,6 +106,10 @@ class Monster {
         return stories;
     }
 
+    public void setStoryStars(int storyIndex, int stars) {
+        stories.get(storyIndex).setStars(stars);
+    }
+
     public String getName() {
         return name;
     }
@@ -102,121 +122,294 @@ class Monster {
         return stories.size();
     }
 
+    public int getAllStars() {
+        int totalStars = 0;
+        for (Story story : stories) {
+            totalStars += story.getStars();
+        }
+        return totalStars;
+    }
+
     @Override
     public String toString() {
-        return "Monster Name: " + name + ", Age: " + age + ", Stories Count: " + stories.size();
+        return "Monster Name: " + name + ", Age: " + age + ", Stories Count: " + stories.size() + ", Total Stars: "
+                + getAllStars();
     }
 }
 
+class UI {
+
+    private static Terminal terminal;
+
+    static {
+        try {
+            terminal = TerminalBuilder.builder().system(true).build();
+        } catch (IOException e) {
+            System.err.println("\033[31m菜单显示出错: " + e.getMessage() + "\033[0m");
+        }
+    }
+
+    public static int showMenu(String title, List<String> options) {
+        return showMenu(title, options, true);
+    }
+
+    public static int showMenu(String title, List<String> options, boolean clearScreen) {
+        if (terminal == null)
+            return -1;
+        int selectedIndex = 0;
+
+        Attributes originalAttributes = terminal.enterRawMode();
+        try {
+            NonBlockingReader reader = terminal.reader();
+            terminal.puts(InfoCmp.Capability.cursor_invisible);
+
+            // 对于不需要clear先打印一个空行分隔
+            if (!clearScreen) {
+                terminal.writer().println();
+            }
+
+            boolean firstRun = true;
+
+            while (true) {
+                if (clearScreen) {
+                    terminal.puts(InfoCmp.Capability.clear_screen); // 清理
+                    terminal.puts(InfoCmp.Capability.cursor_home); // 光标归位
+                }
+                if (!firstRun) {
+                    // 移动光标回到开始位置,以免覆盖
+                    terminal.writer().print("\033[" + (options.size() + 3) + "A");
+                }
+
+                firstRun = false;
+
+                var writer = terminal.writer();
+                writer.println("\033[44m=== " + title + " ===\033[0m"); // 蓝色标题
+
+                for (int i = 0; i < options.size(); i++) {
+                    if (i == selectedIndex) {
+                        // 选中项：绿色高亮，前面加 >
+                        writer.println("\033[32m > " + options.get(i) + "\033[0m");
+                    } else {
+                        // 未选中项：普通显示
+                        writer.println("   " + options.get(i));
+                    }
+                }
+                writer.println("使用 'w/s' 上下移动，'Enter' 确认\n");
+
+                terminal.flush();
+
+                // 读按键
+                int input = reader.read();
+
+                if (input == 'w' || input == 'W') {
+                    if (selectedIndex > 0)
+                        selectedIndex--;
+                } else if (input == 's' || input == 'S') {
+                    if (selectedIndex < options.size() - 1)
+                        selectedIndex++;
+                } else if (input == 13 || input == 10) {
+                    // Enter
+                    return selectedIndex;
+                } else if (input == 'q') {
+                    // 按 q 退出
+                    return -1;
+                }
+            }
+        } catch (IOException e) {
+            // 打印红色
+            readInput("\033[31m菜单显示出错: " + e.getMessage() + "\033[0m");
+            return -1;
+        } finally {
+            terminal.setAttributes(originalAttributes);
+            terminal.puts(InfoCmp.Capability.cursor_visible);
+            terminal.flush();
+        }
+    }
+
+    public static String readInput(String prompt) {
+        if (terminal == null)
+            return "";
+        LineReader lineReader = LineReaderBuilder.builder().terminal(terminal).build();
+        return lineReader.readLine(prompt);
+    }
+
+    public static void println(String message) {
+        if (terminal == null)
+            return;
+        terminal.writer().println(message);
+        terminal.flush();
+    }
+
+    public static void pause() {
+        if (terminal == null)
+            return;
+        Attributes originalAttributes = terminal.enterRawMode();
+        try {
+            NonBlockingReader reader = terminal.reader();
+            terminal.writer().println("\n按任意键继续...");
+            terminal.flush();
+            reader.read();
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            terminal.setAttributes(originalAttributes);
+        }
+    }
+}
 
 public class Main {
 
     private static final ArrayList<Monster> monsters = new ArrayList<>();
-    private static final Scanner scanner = new Scanner(System.in);
-
+    // private static final Scanner scanner = new Scanner(System.in);
 
     static void main(String[] args) {
         // 初始化测试数据
         initTestData();
 
-//        while (true)
-        showStatistics();
+        while (true)
+            showStatistics();
 
     }
 
-
     private static void showStatistics() {
-        System.out.println("\033[44m======= 怪兽统计 =======\033[0m");
-        // 打印表格
-        String table = AsciiTable.getTable(monsters, Arrays.asList(
-                new Column().header("序号").with(m -> String.valueOf(monsters.indexOf(m) + 1)),
-                new Column().header("\033[32m名称\033[0m").with(Monster::getName),
-                new Column().header("\033[32m年龄\033[0m").with(m -> String.valueOf(m.getAge())),
-                new Column().header("\033[32m故事数量\033[0m").with(m -> String.valueOf(m.getStoriesCount()))));
-        System.out.println(table);
+        ArrayList<String> monsterOptions = new ArrayList<>();
+
+        int maxStars = 0;
+        // 先计算所有怪兽中的最高分
+        for (Monster m : monsters) {
+            if (m.getAllStars() > maxStars) {
+                maxStars = m.getAllStars();
+            }
+        }
+
+        for (Monster monster : monsters) {
+            String name = monster.getName();
+            // 最高分，加上标记
+            if (monster.getAllStars() == maxStars) {
+                name += " \033[33m(最受欢迎)\033[0m";
+            }
+            monsterOptions.add(name + " (年龄: " + monster.getAge() + ", 故事数: " + monster.getStoriesCount() + ", 星星数："
+                    + monster.getAllStars() + ")");
+        }
+        monsterOptions.add("添加新怪兽");
+
+        int choice = UI.showMenu("怪兽统计", monsterOptions);
 
         // 选择查看详情
-        System.out.print("请选择要查看详情的怪兽序号 (输入0添加怪兽): ");
-        int choice = scanner.nextInt();
-        if (choice == 0) {
-                showAddMonster();
-            } else if (choice > 0 && choice <= monsters.size()) {
-            showMonsterDetail(monsters.get(choice - 1));
+        if (choice >= 0 && choice < monsters.size()) {
+            showMonsterDetail(monsters.get(choice));
+        } else if (choice == monsters.size()) {
+            showAddMonster();
+            showStatistics();
         } else {
-            System.out.println("无效的选择，请重试");
+            UI.println("输入错误");
         }
     }
 
     private static void showAddMonster() {
-        scanner.nextLine(); // 清除换行符
-        System.out.print("请输入怪兽名称: ");
-        String name = scanner.nextLine();
-        System.out.print("请输入怪兽年龄: ");
-        int age = scanner.nextInt();
-
+        String name;
+        int age;
+        try {
+            name = UI.readInput("请输入怪兽名称: ");
+            age = Integer.parseInt(UI.readInput("请输入怪兽年龄: "));
+        } catch (NumberFormatException e) {
+            UI.println("\033[31m输入无效，添加怪兽失败！\033[0m");
+            UI.pause();
+            return;
+        }
         Monster newMonster = new Monster(name, age);
         monsters.add(newMonster);
         System.out.println("怪兽添加成功！");
     }
 
     private static void showMonsterDetail(Monster monster) {
-        System.out.println("\n\033[44m======= 怪兽详情 =======\033[0m");
-        System.out.println("名称: " + monster.getName());
-        System.out.println("年龄: " + monster.getAge());
-        System.out.println("故事数量: " + monster.getStoriesCount());
-        System.out.println("\n--- 故事列表 ---");
+        UI.println("\n\033[44m======= 怪兽详情 =======\033[0m");
+        UI.println("名称: " + monster.getName());
+        UI.println("年龄: " + monster.getAge());
+        UI.println("故事数量: " + monster.getStoriesCount());
+        UI.println("故事总评分: " + monster.getAllStars());
+        UI.println("\n--- 故事列表 ---");
 
         if (monster.getStories().isEmpty()) {
-            System.out.println("(无故事)");
+            UI.println("(无故事)");
         } else {
             String storyTable = AsciiTable.getTable(monster.getStories(), Arrays.asList(
                     new Column().header("标题").with(Story::getTitle),
                     new Column().header("类型").with(s -> s.getStoryType().toString()),
                     new Column().header("评分").with(s -> String.valueOf(s.getStars())),
-                    new Column().header("创建时间").with(s -> s.getCreateDate()),
+                    new Column().header("创建时间").with(Story::getCreateDate),
                     new Column().header("内容").with(Story::getContent)
 
             ));
-            System.out.println(storyTable);
+            UI.println(storyTable);
         }
 
         // 添加故事或返回主菜单
-        System.out.print("输入1添加故事，输入0返回主菜单: ");
-        int action = scanner.nextInt();
-        if (action == 1) {
-            showAddStory(monster);
-            // 重新显示详情
-            showMonsterDetail(monster);
-        } else {
-            showStatistics();
+        int action = UI.showMenu("操作选择", Arrays.asList("添加新故事", "为故事设置评分", "返回主菜单"), false);
+        switch (action) {
+            case 0 -> showAddStory(monster);
+            case 1 -> showSetStoryStar(monster);
+            case 2 -> {
+                // 返回主菜单
+            }
+            default -> {
+                UI.println("\033[31m无效的操作选择！\033[0m");
+                UI.pause();
+            }
         }
 
     }
 
+    private static void showSetStoryStar(Monster monster) {
+        if (monster.getStories().isEmpty()) {
+            UI.println("\033[31m该怪兽没有故事，无法设置评分！\033[0m");
+            UI.pause();
+            return;
+        }
+
+        ArrayList<String> storyOptions = new ArrayList<>();
+        for (Story story : monster.getStories()) {
+            storyOptions.add(story.getTitle() + " (当前评分: " + story.getStars() + ")");
+        }
+
+        int storyChoice = UI.showMenu("选择要评分的故事", storyOptions);
+        if (storyChoice >= 0 && storyChoice < monster.getStories().size()) {
+            String starInput = UI.readInput("请输入评分: ");
+            try {
+                int stars = Integer.parseInt(starInput);
+                if (stars < 0) {
+                    throw new NumberFormatException();
+                }
+                monster.setStoryStars(storyChoice, stars);
+                UI.println("评分设置成功！");
+            } catch (NumberFormatException e) {
+                UI.println("\033[31m无效的评分输入\033[0m");
+            }
+        } else {
+            UI.println("\033[31m无效的故事选择！\033[0m");
+        }
+        UI.pause();
+    }
+
     private static void showAddStory(Monster monster) {
-        scanner.nextLine(); // 清除换行符
-        System.out.print("请输入故事标题: ");
-        String title = scanner.nextLine();
-        System.out.print("请选择故事类型 (1: 搞笑类, 2: 冒险类, 3: 学习类): ");
-        int typeChoice = scanner.nextInt();
+        String title = UI.readInput("请输入故事标题: ");
+        int typeChoice = UI.showMenu("请选择故事类型", Arrays.asList("搞笑类", "冒险类", "学习类"), false);
         StoryType storyType;
         switch (typeChoice) {
-            case 1 -> storyType = StoryType.FUNNY;
-            case 2 -> storyType = StoryType.ADVENTURE;
-            case 3 -> storyType = StoryType.LEARNING;
+            case 0 -> storyType = StoryType.FUNNY;
+            case 1 -> storyType = StoryType.ADVENTURE;
+            case 2 -> storyType = StoryType.LEARNING;
             default -> {
-                System.out.println("无效的类型选择，默认设置为搞笑类");
+                UI.println("\033[31m无效的类型选择，默认设置为搞笑类\033[0m");
                 storyType = StoryType.FUNNY;
             }
         }
-        System.out.print("请输入故事内容: ");
-        scanner.nextLine();
-        String content = scanner.nextLine();
-
-
+        String content = UI.readInput("请输入故事内容: ");
         Story newStory = new Story(title, content, storyType);
         monster.addStory(newStory);
-        System.out.println("故事添加成功！");
+        UI.println("故事添加成功！");
+        // 等待用户按键
+        UI.pause();
     }
 
     private static void initTestData() {
@@ -225,13 +418,14 @@ public class Main {
             Monster testMonster = new Monster("Test Monster " + i, 5 + i * i);
             testMonster.addStory(new Story("Story 1", "1111111111111111111", StoryType.FUNNY));
             testMonster.addStory(new Story("Story 2", "222222222222222222222", StoryType.FUNNY));
+            testMonster.setStoryStars(1, i);
             monsters.add(testMonster);
 
             // 输出测试数据
-            System.out.println("生成测试数据: " + testMonster);
+            System.out.println("生成测试数据: " + testMonster.toString());
             System.out.println("包含故事: ");
             for (Story story : testMonster.getStories()) {
-                System.out.println("" + story);
+                System.out.println(story.toString());
             }
         }
     }

@@ -14,11 +14,25 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
     <dependencies>
-        <dependency>
-            <groupId>org.beryx</groupId>
-            <artifactId>text-io</artifactId>
-            <version>3.4.1</version>
-        </dependency>
+
+            <dependency>
+                <groupId>org.jline</groupId>
+                <artifactId>jline</artifactId>
+                <version>3.25.0</version>
+            </dependency>
+            
+            <dependency>
+                <groupId>org.jline</groupId>
+                <artifactId>jline-terminal-jna</artifactId>
+                <version>3.25.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>net.java.dev.jna</groupId>
+                <artifactId>jna</artifactId>
+                <version>5.13.0</version>
+            </dependency>
+
         <dependency>
             <groupId>com.github.freva</groupId>
             <artifactId>ascii-table</artifactId>
